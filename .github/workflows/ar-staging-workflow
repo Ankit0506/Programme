@@ -30,7 +30,7 @@ env:
 jobs:
   runtimeInfo: 
     name: Print Runtime Environment details
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Show Runtime Env Values
         run: |
