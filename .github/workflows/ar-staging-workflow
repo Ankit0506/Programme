@@ -1,0 +1,78 @@
+name: Staging Deploy Workflows
+on:
+  push:
+    branches:
+      - 'master'
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to deploy'
+        required: true
+      customer:
+        description: 'Customer to deploy'
+        required: true
+        type: choice
+        options:
+          - sycamore-mdr-auto-ps
+          - sycamore-mdr-malta-staging-ps
+          - sycamore-mdr-miami-staging-ps
+          - sycamore-mdr-missouri-staging-ps
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  tag: "${{ github.event.inputs.tag }}"
+  customer: "${{ github.event.inputs.customer }}"
+
+jobs:
+  runtimeInfo: 
+    name: Print Runtime Environment details
+    runs-on: self-hosted
+    steps:
+      - name: Show Runtime Env Values
+        run: |
+          echo "Running Staging Release workflow with the following Env Values:"
+       
+      - name: Set Tag Environment Variable
+        run: echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+
+      - name: Set customer Variable
+        run: echo "customer=${{ github.event.inputs.customer }}" >> $GITHUB_ENV
+        #run: echo "environment_file_path=deployments/plat-stage/sycamore-mdr/envs/sycamore-mdr-auto-ps.yaml" >> $GITHUB_ENV
+
+      - name: Replace Environment file
+        run: |
+      
+          if [[ "${customer}" == "sycamore-mdr-auto-ps" ]]; then
+            echo "environment_file_path=deployments/plat-stage/sycamore-mdr/envs/${customer}.yaml" >> $GITHUB_ENV
+            echo "hello"
+          elif [[ "${customer}" == "sycamore-mdr-malta-staging-ps" ]]; then
+            echo "environment_file_path=deployments/plat-stage/sycamore-mdr/envs/${customer}.yaml" >> $GITHUB_ENV
+          elif [[ "${customer}" == "sycamore-mdr-miami-staging-ps" ]]; then
+            echo "environment_file_path=deployments/plat-stage/sycamore-mdr/envs/${customer}.yaml" >> $GITHUB_ENV
+          elif [[ "${customer}" == "sycamore-mdr-missouri-staging-ps" ]]; then
+            echo "environment_file_path=deployments/plat-stage/sycamore-mdr/envs/${customer}.yaml" >> $GITHUB_ENV
+          else
+            echo "Invalid customer: $customer"
+            exit 1
+          fi
+
+      # - uses: infovista-opensource/setup-yq4@v0.9.3
+      # - name: Update Environment Configurations with tag and timestamp
+      #   run: |
+      #     echo $environment_file_path
+      #     updatedAt=$(date +%Y%m%d%H%M%S)  
+      #     short_sha=$(echo "${{ github.sha }}" | cut -c1-7) 
+      #     updated_tag="${{ github.ref_name }}"    
+      #     image=${updated_tag} yq -i '.global.image.tag = strenv(image)' $environment_file_path
+      #     updatedAt=$updatedAt yq -i '.global.deployed_at = strenv(updatedAt)' $environment_file_path
+      #     git diff $environment_file_path   
+  
+      #     git add .
+      #     echo "git add . - DONE"
+
+      #     fi
+      #     echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] done"
