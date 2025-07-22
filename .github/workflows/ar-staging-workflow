@@ -1,4 +1,4 @@
-name: Ankit
+name: Ankit RAI
 on:
   push:
     branches:
