@@ -12,16 +12,16 @@ on:
         required: true
         type: choice
         options:
-          - abc
-          - def
+          - sycamore-mdr-miami-staging-ps
+          - sycamore-mdr-missouri-staging-ps
 
 permissions:
   id-token: write
   contents: write
 
 env:
-  organization: "asdf"
-  repository: "qwer"
+  organization: "sycamore"
+  repository: "mdr"
   remote_branch_name: "${{ github.actor }}-${{ github.run_id }}"
   branch_name: "${{ github.ref_name }}"
 
@@ -96,8 +96,8 @@ jobs:
         shell: bash
         run: |
           ./deploy/scripts/dockerize.sh -l -p -e
-
-deploy:
+          
+  deploy:
     name: Deploy Target Environment
     needs: build
     runs-on: self-hosted
