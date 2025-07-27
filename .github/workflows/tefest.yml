@@ -1,0 +1,178 @@
+name: mdr deployment Workflow
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and deploy'
+        required: false
+      customer:
+        description: 'Customer to deploy'
+        required: true
+        type: choice
+        options:
+          - sycamore-mdr-miami-staging-ps
+          - sycamore-mdr-missouri-staging-ps
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  organization: "sycamore"
+  repository: "mdr"
+  remote_branch_name: "${{ github.actor }}-${{ github.run_id }}"
+
+
+jobs:
+  runtimeInfo: 
+    name: Print Runtime Environment details
+    runs-on: self-hosted
+    steps:
+      - name: Show Runtime Env Values
+        run: |
+          echo "Deploying Branch: ${{ env.branch_name }}"
+          echo "organization: ${{ env.organization }}"
+          echo "repository: ${{ env.repository }}"
+          echo "remote_branch_name: ${{ env.remote_branch_name }}"
+
+  deploy:
+    name: Deploy Target Environment
+    runs-on: self-hosted
+    steps:
+      - name: Checkout deployment-settings
+        uses: actions/checkout@v4
+        with:
+          ref: "main"
+          repository: "Sycamore/deployment-settings"
+          token: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
+
+      
+      - name: Configure git Remote
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
+          BRANCH_NAME: ${{ env.remote_branch_name }}
+        run: |
+          echo $BRANCH_NAME=${{ env.remote_branch_name }}
+          echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] configuring git..."
+          git config user.email "noreply@sycamoreinformatics.com"
+          git config user.name "GitHub Actions"
+
+          BRANCH_EXISTS=$(git ls-remote --heads origin $BRANCH_NAME)
+          if [[ -z ${BRANCH_EXISTS} ]]; then
+            echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] branch does not exist"
+            git checkout -b $BRANCH_NAME
+          else
+            echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] branch already exists"
+            git fetch
+            git switch $BRANCH_NAME
+          fi
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip' # caching pip dependencies
+
+      - name: Install pip requirements
+        run: pip install -r requirements.txt
+      
+      - name: Install GH CLI
+        uses: dev-hanz-ops/install-gh-cli-action@v0.1.0
+        with:
+          gh-cli-version: 2.39.2
+
+      - name: Set tag env variable
+        run: echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+
+      - name: Export customer input
+        run: echo "customer=${{ github.event.inputs.customer }}" >> $GITHUB_ENV
+
+      - name: Replace Environment file
+        run: |
+          if [[ "${customer}" == "sycamore-mdr-missouri-staging-ps" ]]; then
+            echo "environment_file_path=deployments/plat-stage/sycamore-mdr/envs/${customer}.yaml" >> $GITHUB_ENV
+          elif [[ "${customer}" == "sycamore-mdr-miami-staging-ps" ]]; then
+            echo "environment_file_path=deployments/plat-stage/sycamore-mdr/envs/${customer}.yaml" >> $GITHUB_ENV
+          else
+            echo "Invalid customer: $customer"
+            exit 1
+          fi    
+
+      - uses: infovista-opensource/setup-yq4@v0.9.3
+      - name: Update Environment Configurations with tag and timestamp
+        run: |
+          echo "Using environment file: $environment_file_path"
+          updatedAt=$(date +%Y%m%d%H%M%S)  
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            echo "Updating tag to: ${{ github.event.inputs.tag }}"
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+            image=${{ github.event.inputs.tag }} yq -i '.global.image.tag = strenv(image)' $environment_file_path
+          else
+            echo "No tag provided. Skipping image tag update."
+            current_tag=$(yq e '.global.image.tag' "$environment_file_path")
+            version_tag=$(echo "$current_tag" | grep -oE 'mdr[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+            yq -i ".global.image.tag = \"$version_tag\"" "$environment_file_path"
+          fi
+          updatedAt=$updatedAt yq -i '.global.deployed_at = strenv(updatedAt)' $environment_file_path
+          git diff $environment_file_path
+
+      - name: Create PR in deployment-settings
+        env:
+            GH_TOKEN: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
+        run: |
+          git status
+          BRANCH_NAME="${{ env.remote_branch_name }}"
+          BRANCH_EXISTS=$(git ls-remote --heads origin $BRANCH_NAME)
+  
+          PR_BODY=$(cat <<EOF
+          ## What
+
+          This pull request was created by the ${{ github.workflow }}  in the ${{ github.repository }} repository. This PR will do deployment in the staging cluster for ${{ env.tag }} in the ${{ env.full_env_name }} namespace
+  
+          ## Why
+
+          The deployment-settings repository manages ArgoCD deployments for all environments. This PR deploys a staging environment for ${{ env.tag }}
+  
+          ## References
+  
+          ${{ github.server_url }}/${{ github.repository }}/tree/${{ env.tag }}
+  
+          EOF
+          )
+  
+          git add .
+          echo "git add . - DONE"
+          if [[ -z ${BRANCH_EXISTS} ]]; then
+            CHANGES_EXIST="exists"
+          else
+            CHANGES_EXIST=$(git diff origin/$BRANCH_NAME)
+          fi
+          echo "CHANGES_EXISTS? . - $CHANGES_EXIST"
+          if [[ -z ${CHANGES_EXIST} ]]; then
+            echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] no changes."
+          else
+            echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] pushing changes..."
+            git commit -m "(github actions) creating new environment for staging deployment"
+            echo "git commit - DONE"
+            git push origin $BRANCH_NAME
+  
+            if [[ -z ${BRANCH_EXISTS} ]]; then
+              echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] creating pull request..."
+              gh pr create \
+                --body "$PR_BODY" \
+                --title "feat: "${customer}" deployment" \
+                --head "$BRANCH_NAME" \
+                --label "deploy" \
+                --base "main"
+            else
+              echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] pull request already exists"
+            fi
+  
+            #Merge PR
+            # echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] merging pull request..."
+            # gh pr merge \
+            #   --merge \
+            #   --admin \
+            #   --delete-branch \
+            #   ${{ env.remote_branch_name }}
+          fi
+          echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] done"
