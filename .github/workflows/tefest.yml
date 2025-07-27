@@ -90,9 +90,13 @@ jobs:
             image=${{ github.event.inputs.tag }} yq -i '.global.image.tag = strenv(image)' $environment_file_path
           else
             echo "No tag provided. Skipping image tag update."
-            current_tag=$(yq e '.global.image.tag' "$environment_file_path")
-            version_tag=$(echo "$current_tag" | grep -oE 'mdr[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-            yq -i ".global.image.tag = \"$version_tag\"" "$environment_file_path"
+            # current_tag=$(yq e '.global.image.tag' "$environment_file_path")
+            # version_tag=$(echo "$current_tag" | grep -oE 'mdr[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+            # yq -i ".global.image.tag = \"$version_tag\"" "$environment_file_path"
+            without_prefix="${tag#${customer}-}"
+            clean_tag="${without_prefix%-??????????????}"
+            echo "Extracted tag: $clean_tag"
+            yq -i ".global.image.tag = \"$clean_tag\"" "${{ env.environment_file_path }}"
           fi
           updatedAt=$updatedAt yq -i '.global.deployed_at = strenv(updatedAt)' $environment_file_path
           git diff $environment_file_path
