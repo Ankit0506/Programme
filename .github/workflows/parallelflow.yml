@@ -1,16 +1,12 @@
 name: testing26sept
+
 on:
   workflow_dispatch:
     inputs:
       branch:
-        description: "Select branch to run workflow on"
+        description: "Enter branch name to run workflow on"
         required: true
         default: "MDR-Malta"
-        type: choice
-        options: 
-          - MDR-Malta
-          - main
-          - ar-24dev
 
       browser:
         description: "Select Browser"
@@ -31,12 +27,12 @@ on:
           - Staging
 
       headless:
-        description: "Headless mode (default: false) - its best to let it be false. Change it only if required"
+        description: "Headless mode (default: false) - it's best to leave it as false. Change only if required."
         required: true
         default: "false"
         
       test_name:
-        description: "Enter test file name (say TC101431_MDR_MALTA_Smoke_EndToEndPart1.robot)"
+        description: "Enter test file name (e.g., TC101431_MDR_MALTA_Smoke_EndToEndPart1.robot)"
         required: true
         default: "TC101431_MDR_MALTA_Smoke_EndToEndPart1.robot"
   
